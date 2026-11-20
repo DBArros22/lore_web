@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Uma Arte Especial ✨</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            overflow: hidden;
+            background-color: #0f0c29;
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            cursor: crosshair;
+        }
+
+        #ui-layer {
+            position: relative;
+            z-index: 2;
+            pointer-events: none;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        #instruction {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 15px 25px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: opacity 0.5s ease;
+        }
+
+        #instruction h2 {
+            font-size: 1.2rem;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        #progress-container {
+            width: 80%;
+            max-width: 300px;
+            height: 10px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            transition: opacity 0.5s ease;
+        }
+
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff758c, #ff7eb3, #a18cd1, #fbc2eb);
+            border-radius: 10px;
+            transition: width 0.1s ease;
+        }
+
+        #final-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.8);
+            background: rgba(20, 15, 45, 0.85);
+            backdrop-filter: blur(15px);
+            padding: 40px 30px;
+            border-radius: 25px;
+            border: 2px solid rgba(255, 182, 193, 0.4);
+            box-shadow: 0 15px 50px rgba(255, 105, 180, 0.3);
+            max-width: 90%;
+            width: 400px;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 3;
+        }
+
+        #final-message.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+            pointer-events: auto;
+        }
+
+        #final-message h1 {
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+            background: linear-gradient(45deg, #ff9a9e, #fecfef, #a1c4fd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        #final-message p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: #e0e0e0;
+            margin-bottom: 25px;
+        }
+
+        button {
+            background: linear-gradient(45deg, #ff758c, #ff7eb3);
+            border: none;
+            padding: 12px 28px;
+            border-radius: 25px;
+            color: white;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(255, 117, 140, 0.4);
+            transition: transform 0.2s;
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="artCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div id="instruction">
+            <h2>✨ Arraste o dedo (ou mouse) pela tela para criar arte ✨</h2>
+        </div>
+
+        <div id="progress-container">
+            <div id="progress-bar"></div>
+        </div>
+    </div>
+
+    <div id="final-message">
+        <h1>Obra de arte concluída! 🎨</h1>
+        <p>Você tentou fazer um desenho bonito, mas a verdade é que nenhuma arte aqui chega perto de você...<br><br>Você é <strong>linda</strong> e <strong>perfeitinha</strong> demais! ✨💖</p>
+        <button onclick="resetArt()">Pintar mais</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('artCanvas');
+        const ctx = canvas.getContext('2d');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+        const instruction = document.getElementById('instruction');
+        const finalMessage = document.getElementById('final-message');
+
+        let width, height;
+        let particles = [];
+        let hue = 0;
+        let progress = 0;
+        let completed = false;
+        let isDrawing = false;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        class Particle {
+            constructor(x, y, isConfetti = false) {
+                this.x = x;
+                this.y = y;
+                this.isConfetti = isConfetti;
+                this.size = isConfetti ? Math.random() * 8 + 4 : Math.random() * 15 + 5;
+                this.speedX = isConfetti ? (Math.random() - 0.5) * 12 : (Math.random() - 0.5) * 4;
+                this.speedY = isConfetti ? (Math.random() - 0.5) * 12 - 3 : (Math.random() - 0.5) * 4;
+                this.color = `hsl(${hue}, 100%, 65%)`;
+                this.alpha = 1;
+                this.decay = isConfetti ? Math.random() * 0.015 + 0.005 : Math.random() * 0.02 + 0.01;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.isConfetti) {
+                    this.speedY += 0.2; // gravidade leve para confetes
+                }
+                this.alpha -= this.decay;
+                if (!this.isConfetti && this.size > 0.2) this.size -= 0.1;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        function createArt(x, y) {
+            hue += 3;
+            for (let i = 0; i < 3; i++) {
+                particles.push(new Particle(x, y));
+            }
+
+            if (!completed) {
+                progress += 0.6; // Velocidade com que a barra enche
+                progressBar.style.width = `${Math.min(progress, 100)}%`;
+
+                if (progress >= 100) {
+                    finishArt();
+                }
+            }
+        }
+
+        function finishArt() {
+            completed = true;
+            instruction.style.opacity = '0';
+            progressContainer.style.opacity = '0';
+            
+            // Explosão de partículas coloridas no centro
+            for (let i = 0; i < 120; i++) {
+                hue = Math.random() * 360;
+                particles.push(new Particle(width / 2, height / 2, true));
+            }
+
+            setTimeout(() => {
+                finalMessage.classList.add('show');
+            }, 400);
+        }
+
+        function resetArt() {
+            finalMessage.classList.remove('show');
+            instruction.style.opacity = '1';
+            instruction.innerHTML = "<h2>✨ Continue pintando livremente! ✨</h2>";
+        }
+
+        // Eventos de Mouse
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            createArt(e.clientX, e.clientY);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDrawing) {
+                createArt(e.clientX, e.clientY);
+            }
+        });
+
+        window.addEventListener('mouseup', () => isDrawing = false);
+
+        // Eventos de Toque (Celular)
+        canvas.addEventListener('touchstart', (e) => {
+            isDrawing = true;
+            const touch = e.touches[0];
+            createArt(touch.clientX, touch.clientY);
+        }, { passive: true });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (isDrawing) {
+                const touch = e.touches[0];
+                createArt(touch.clientX, touch.clientY);
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchend', () => isDrawing = false);
+
+        // Loop de Animação
+        function animate() {
+            // Cria um efeito de rastro suave sem apagar totalmente o fundo
+            ctx.fillStyle = 'rgba(15, 12, 41, 0.15)';
+            ctx.fillRect(0, 0, width, height);
+
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update();
+                particles[i].draw();
+
+                if (particles[i].alpha <= 0) {
+                    particles.splice(i, 1);
+                    i--;
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
