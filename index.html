@@ -31,12 +31,10 @@
             touch-action: none;
         }
 
-        /* Camada fixa onde o desenho fica registrado */
         #drawingCanvas {
             z-index: 1;
         }
 
-        /* Camada superior para brilhos e confetes */
         #fxCanvas {
             z-index: 2;
             pointer-events: none;
@@ -206,7 +204,6 @@
         let lastY = 0;
 
         function resize() {
-            // Salva o desenho atual antes de redimensionar
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = drawCanvas.width;
             tempCanvas.height = drawCanvas.height;
@@ -217,7 +214,6 @@
             width = drawCanvas.width = fxCanvas.width = window.innerWidth;
             height = drawCanvas.height = fxCanvas.height = window.innerHeight;
 
-            // Restaura o desenho
             drawCtx.drawImage(tempCanvas, 0, 0);
         }
 
@@ -273,7 +269,6 @@
             hue = (hue + 2) % 360;
             const currentColor = `hsl(${hue}, 100%, 65%)`;
 
-            // Desenha a linha permanente no canvas de fundo
             drawCtx.save();
             drawCtx.beginPath();
             drawCtx.moveTo(lastX, lastY);
@@ -287,18 +282,17 @@
             drawCtx.stroke();
             drawCtx.restore();
 
-            // Calcula distância percorrida para encher a barra proporcionalmente ao desenho
             const dist = Math.hypot(x - lastX, y - lastY);
             lastX = x;
             lastY = y;
 
-            // Adiciona pequenos brilhos na ponta do pincel
             if (Math.random() > 0.4) {
                 particles.push(new Sparkle(x, y));
             }
 
             if (!completed && dist > 0) {
-                progress += dist * 0.08; // Enche conforme a extensão do traço
+                // Multiplicador menor (0.018) para a barra encher bem devagar e exigir mais desenho
+                progress += dist * 0.018; 
                 progressBar.style.width = `${Math.min(progress, 100)}%`;
 
                 if (progress >= 100) {
@@ -313,7 +307,6 @@
             instruction.style.opacity = '0';
             progressContainer.style.opacity = '0';
             
-            // Explosão de confetes brilhantes
             for (let i = 0; i < 130; i++) {
                 hue = Math.random() * 360;
                 particles.push(new Sparkle(width / 2, height / 2, true));
@@ -337,12 +330,10 @@
             instruction.innerHTML = "<h2>✨ Tela limpa! Desenhe à vontade ✨</h2>";
         }
 
-        // Eventos de Mouse
         drawCanvas.addEventListener('mousedown', (e) => startPosition(e.clientX, e.clientY));
         drawCanvas.addEventListener('mousemove', (e) => drawStroke(e.clientX, e.clientY));
         window.addEventListener('mouseup', () => isDrawing = false);
 
-        // Eventos de Toque (Celular)
         drawCanvas.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
             startPosition(touch.clientX, touch.clientY);
@@ -355,7 +346,6 @@
 
         window.addEventListener('touchend', () => isDrawing = false);
 
-        // Loop apenas para os brilhos e confetes (não apaga o desenho)
         function animateFX() {
             fxCtx.clearRect(0, 0, width, height);
 
