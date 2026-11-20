@@ -15,7 +15,6 @@
 
         body {
             overflow: hidden;
-            background-color: #0f0c29;
             background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: white;
@@ -28,13 +27,24 @@
             position: absolute;
             top: 0;
             left: 0;
-            z-index: 1;
             cursor: crosshair;
+            touch-action: none;
+        }
+
+        /* Camada fixa onde o desenho fica registrado */
+        #drawingCanvas {
+            z-index: 1;
+        }
+
+        /* Camada superior para brilhos e confetes */
+        #fxCanvas {
+            z-index: 2;
+            pointer-events: none;
         }
 
         #ui-layer {
             position: relative;
-            z-index: 2;
+            z-index: 3;
             pointer-events: none;
             height: 100%;
             display: flex;
@@ -46,17 +56,17 @@
         }
 
         #instruction {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.12);
             backdrop-filter: blur(10px);
             padding: 15px 25px;
             border-radius: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
             transition: opacity 0.5s ease;
         }
 
         #instruction h2 {
-            font-size: 1.2rem;
+            font-size: 1.15rem;
             font-weight: 500;
             letter-spacing: 0.5px;
         }
@@ -64,11 +74,12 @@
         #progress-container {
             width: 80%;
             max-width: 300px;
-            height: 10px;
+            height: 12px;
             background: rgba(255, 255, 255, 0.15);
             border-radius: 10px;
             overflow: hidden;
             margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             transition: opacity 0.5s ease;
         }
 
@@ -85,18 +96,19 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%) scale(0.8);
-            background: rgba(20, 15, 45, 0.85);
+            background: rgba(20, 15, 45, 0.88);
             backdrop-filter: blur(15px);
             padding: 40px 30px;
             border-radius: 25px;
-            border: 2px solid rgba(255, 182, 193, 0.4);
-            box-shadow: 0 15px 50px rgba(255, 105, 180, 0.3);
+            border: 2px solid rgba(255, 182, 193, 0.45);
+            box-shadow: 0 15px 50px rgba(255, 105, 180, 0.35);
             max-width: 90%;
             width: 400px;
             opacity: 0;
             pointer-events: none;
             transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            z-index: 3;
+            z-index: 4;
+            text-align: center;
         }
 
         #final-message.show {
@@ -120,17 +132,28 @@
             margin-bottom: 25px;
         }
 
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
         button {
             background: linear-gradient(45deg, #ff758c, #ff7eb3);
             border: none;
-            padding: 12px 28px;
+            padding: 12px 24px;
             border-radius: 25px;
             color: white;
-            font-size: 1rem;
+            font-size: 0.95rem;
             font-weight: bold;
             cursor: pointer;
             box-shadow: 0 5px 15px rgba(255, 117, 140, 0.4);
             transition: transform 0.2s;
+        }
+
+        button.secondary {
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: none;
         }
 
         button:active {
@@ -140,11 +163,12 @@
 </head>
 <body>
 
-    <canvas id="artCanvas"></canvas>
+    <canvas id="drawingCanvas"></canvas>
+    <canvas id="fxCanvas"></canvas>
 
     <div id="ui-layer">
         <div id="instruction">
-            <h2>✨ Arraste o dedo (ou mouse) pela tela para criar arte ✨</h2>
+            <h2>🎨 Desenhe algo que você acha bonito:</h2>
         </div>
 
         <div id="progress-container">
@@ -154,13 +178,19 @@
 
     <div id="final-message">
         <h1>Obra de arte concluída! 🎨</h1>
-        <p>Você tentou fazer um desenho bonito, mas a verdade é que nenhuma arte aqui chega perto de você...<br><br>Você é <strong>linda</strong> e <strong>perfeitinha</strong> demais! ✨💖</p>
-        <button onclick="resetArt()">Pintar mais</button>
+        <p>Você tentou desenhar algo bonito, mas a verdade é que nenhuma arte aqui chega perto de você...<br><br>Você é <strong>linda</strong> e <strong>perfeitinha</strong> demais! ✨💖</p>
+        <div class="btn-group">
+            <button onclick="continueDrawing()">Continuar desenhando</button>
+            <button class="secondary" onclick="clearCanvas()">Limpar tela</button>
+        </div>
     </div>
 
     <script>
-        const canvas = document.getElementById('artCanvas');
-        const ctx = canvas.getContext('2d');
+        const drawCanvas = document.getElementById('drawingCanvas');
+        const drawCtx = drawCanvas.getContext('2d');
+        const fxCanvas = document.getElementById('fxCanvas');
+        const fxCtx = fxCanvas.getContext('2d');
+
         const progressBar = document.getElementById('progress-bar');
         const progressContainer = document.getElementById('progress-container');
         const instruction = document.getElementById('instruction');
@@ -172,60 +202,103 @@
         let progress = 0;
         let completed = false;
         let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
 
         function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
+            // Salva o desenho atual antes de redimensionar
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = drawCanvas.width;
+            tempCanvas.height = drawCanvas.height;
+            if (tempCanvas.width > 0 && tempCanvas.height > 0) {
+                tempCanvas.getContext('2d').drawImage(drawCanvas, 0, 0);
+            }
+
+            width = drawCanvas.width = fxCanvas.width = window.innerWidth;
+            height = drawCanvas.height = fxCanvas.height = window.innerHeight;
+
+            // Restaura o desenho
+            drawCtx.drawImage(tempCanvas, 0, 0);
         }
 
         window.addEventListener('resize', resize);
         resize();
 
-        class Particle {
+        class Sparkle {
             constructor(x, y, isConfetti = false) {
                 this.x = x;
                 this.y = y;
                 this.isConfetti = isConfetti;
-                this.size = isConfetti ? Math.random() * 8 + 4 : Math.random() * 15 + 5;
-                this.speedX = isConfetti ? (Math.random() - 0.5) * 12 : (Math.random() - 0.5) * 4;
-                this.speedY = isConfetti ? (Math.random() - 0.5) * 12 - 3 : (Math.random() - 0.5) * 4;
-                this.color = `hsl(${hue}, 100%, 65%)`;
+                this.size = isConfetti ? Math.random() * 8 + 4 : Math.random() * 4 + 2;
+                this.speedX = isConfetti ? (Math.random() - 0.5) * 14 : (Math.random() - 0.5) * 3;
+                this.speedY = isConfetti ? (Math.random() - 0.5) * 14 - 4 : (Math.random() - 0.5) * 3;
+                this.color = `hsl(${hue}, 100%, 70%)`;
                 this.alpha = 1;
-                this.decay = isConfetti ? Math.random() * 0.015 + 0.005 : Math.random() * 0.02 + 0.01;
+                this.decay = isConfetti ? Math.random() * 0.012 + 0.005 : Math.random() * 0.03 + 0.02;
             }
 
             update() {
                 this.x += this.speedX;
                 this.y += this.speedY;
                 if (this.isConfetti) {
-                    this.speedY += 0.2; // gravidade leve para confetes
+                    this.speedY += 0.22;
                 }
                 this.alpha -= this.decay;
-                if (!this.isConfetti && this.size > 0.2) this.size -= 0.1;
             }
 
             draw() {
-                ctx.save();
-                ctx.globalAlpha = Math.max(0, this.alpha);
-                ctx.fillStyle = this.color;
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = this.color;
+                fxCtx.save();
+                fxCtx.globalAlpha = Math.max(0, this.alpha);
+                fxCtx.fillStyle = this.color;
+                fxCtx.shadowBlur = 10;
+                fxCtx.shadowColor = this.color;
                 
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+                fxCtx.beginPath();
+                fxCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                fxCtx.fill();
+                fxCtx.restore();
             }
         }
 
-        function createArt(x, y) {
-            hue += 3;
-            for (let i = 0; i < 3; i++) {
-                particles.push(new Particle(x, y));
+        function startPosition(x, y) {
+            isDrawing = true;
+            lastX = x;
+            lastY = y;
+            drawStroke(x, y);
+        }
+
+        function drawStroke(x, y) {
+            if (!isDrawing) return;
+
+            hue = (hue + 2) % 360;
+            const currentColor = `hsl(${hue}, 100%, 65%)`;
+
+            // Desenha a linha permanente no canvas de fundo
+            drawCtx.save();
+            drawCtx.beginPath();
+            drawCtx.moveTo(lastX, lastY);
+            drawCtx.lineTo(x, y);
+            drawCtx.strokeStyle = currentColor;
+            drawCtx.lineWidth = 6;
+            drawCtx.lineCap = 'round';
+            drawCtx.lineJoin = 'round';
+            drawCtx.shadowBlur = 12;
+            drawCtx.shadowColor = currentColor;
+            drawCtx.stroke();
+            drawCtx.restore();
+
+            // Calcula distância percorrida para encher a barra proporcionalmente ao desenho
+            const dist = Math.hypot(x - lastX, y - lastY);
+            lastX = x;
+            lastY = y;
+
+            // Adiciona pequenos brilhos na ponta do pincel
+            if (Math.random() > 0.4) {
+                particles.push(new Sparkle(x, y));
             }
 
-            if (!completed) {
-                progress += 0.6; // Velocidade com que a barra enche
+            if (!completed && dist > 0) {
+                progress += dist * 0.08; // Enche conforme a extensão do traço
                 progressBar.style.width = `${Math.min(progress, 100)}%`;
 
                 if (progress >= 100) {
@@ -236,13 +309,14 @@
 
         function finishArt() {
             completed = true;
+            isDrawing = false;
             instruction.style.opacity = '0';
             progressContainer.style.opacity = '0';
             
-            // Explosão de partículas coloridas no centro
-            for (let i = 0; i < 120; i++) {
+            // Explosão de confetes brilhantes
+            for (let i = 0; i < 130; i++) {
                 hue = Math.random() * 360;
-                particles.push(new Particle(width / 2, height / 2, true));
+                particles.push(new Sparkle(width / 2, height / 2, true));
             }
 
             setTimeout(() => {
@@ -250,47 +324,40 @@
             }, 400);
         }
 
-        function resetArt() {
+        function continueDrawing() {
             finalMessage.classList.remove('show');
             instruction.style.opacity = '1';
-            instruction.innerHTML = "<h2>✨ Continue pintando livremente! ✨</h2>";
+            instruction.innerHTML = "<h2>✨ Continue completando sua arte! ✨</h2>";
+        }
+
+        function clearCanvas() {
+            drawCtx.clearRect(0, 0, width, height);
+            finalMessage.classList.remove('show');
+            instruction.style.opacity = '1';
+            instruction.innerHTML = "<h2>✨ Tela limpa! Desenhe à vontade ✨</h2>";
         }
 
         // Eventos de Mouse
-        canvas.addEventListener('mousedown', (e) => {
-            isDrawing = true;
-            createArt(e.clientX, e.clientY);
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            if (isDrawing) {
-                createArt(e.clientX, e.clientY);
-            }
-        });
-
+        drawCanvas.addEventListener('mousedown', (e) => startPosition(e.clientX, e.clientY));
+        drawCanvas.addEventListener('mousemove', (e) => drawStroke(e.clientX, e.clientY));
         window.addEventListener('mouseup', () => isDrawing = false);
 
         // Eventos de Toque (Celular)
-        canvas.addEventListener('touchstart', (e) => {
-            isDrawing = true;
+        drawCanvas.addEventListener('touchstart', (e) => {
             const touch = e.touches[0];
-            createArt(touch.clientX, touch.clientY);
+            startPosition(touch.clientX, touch.clientY);
         }, { passive: true });
 
-        canvas.addEventListener('touchmove', (e) => {
-            if (isDrawing) {
-                const touch = e.touches[0];
-                createArt(touch.clientX, touch.clientY);
-            }
+        drawCanvas.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            drawStroke(touch.clientX, touch.clientY);
         }, { passive: true });
 
         window.addEventListener('touchend', () => isDrawing = false);
 
-        // Loop de Animação
-        function animate() {
-            // Cria um efeito de rastro suave sem apagar totalmente o fundo
-            ctx.fillStyle = 'rgba(15, 12, 41, 0.15)';
-            ctx.fillRect(0, 0, width, height);
+        // Loop apenas para os brilhos e confetes (não apaga o desenho)
+        function animateFX() {
+            fxCtx.clearRect(0, 0, width, height);
 
             for (let i = 0; i < particles.length; i++) {
                 particles[i].update();
@@ -301,10 +368,10 @@
                     i--;
                 }
             }
-            requestAnimationFrame(animate);
+            requestAnimationFrame(animateFX);
         }
 
-        animate();
+        animateFX();
     </script>
 </body>
 </html>
